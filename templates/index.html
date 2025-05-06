@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Smart Recipe Generator</title>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #f8fafc;
+      --text: #111827;
+      --card-bg: #ffffff;
+    }
+
+    body.dark {
+      --bg: #1f2937;
+      --text: #f9fafb;
+      --card-bg: #374151;
+    }
+
+    body {
+      font-family: 'Poppins', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      margin: 0;
+      padding: 0;
+      transition: all 0.3s ease;
+    }
+
+    header {
+      background-color: #4f46e5;
+      color: white;
+      padding: 2rem 1rem;
+      text-align: center;
+      position: relative;
+    }
+
+    h1 {
+      margin-bottom: 0.5rem;
+      font-size: 2.5rem;
+    }
+
+    .dark-toggle {
+      position: absolute;
+      top: 1rem;
+      right: 1rem;
+      background: white;
+      color: #4f46e5;
+      border: none;
+      border-radius: 8px;
+      padding: 6px 12px;
+      cursor: pointer;
+    }
+
+    .container {
+      max-width: 900px;
+      margin: 2rem auto;
+      padding: 1rem;
+      text-align: center;
+    }
+
+    input[type="text"] {
+      padding: 12px;
+      width: 60%;
+      border-radius: 8px;
+      border: 1px solid #ccc;
+      font-size: 16px;
+      margin-bottom: 1rem;
+    }
+
+    button {
+      padding: 10px 20px;
+      background-color: #4f46e5;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 14px;
+      margin-top: 0.5rem;
+    }
+
+    button:hover {
+      background-color: #4338ca;
+    }
+
+    .error {
+      color: red;
+      margin-top: 1rem;
+    }
+
+    .loading {
+      margin-top: 1rem;
+      font-weight: bold;
+      color: #4f46e5;
+    }
+
+    .recipes {
+      margin-top: 2rem;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 1.5rem;
+    }
+
+    .recipe {
+      background: var(--card-bg);
+      border-radius: 10px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+      padding: 1rem;
+      text-align: left;
+      transition: 0.3s;
+    }
+
+    .recipe img {
+      width: 100%;
+      height: 200px;
+      object-fit: cover;
+      border-radius: 8px;
+      margin-bottom: 0.5rem;
+    }
+
+    .recipe h2 {
+      font-size: 18px;
+      margin: 0.5rem 0;
+    }
+
+    .saved-header {
+      text-align: center;
+      margin-top: 3rem;
+      font-size: 20px;
+      font-weight: 600;
+    }
+
+    @media (max-width: 768px) {
+      input[type="text"] {
+        width: 90%;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Smart Recipe Generator 🍽️</h1>
+    <p>Enter ingredients (comma-separated) to generate delicious recipes</p>
+    <button class="dark-toggle" onclick="toggleDark()">🌗 Toggle Theme</button>
+  </header>
+
+  <div class="container">
+    <input type="text" id="ingredients" placeholder="e.g. chicken, garlic, onion, tomatoes" />
+    <button onclick="generateRecipe()">Generate</button>
+    <div class="loading" id="loading" style="display:none;">Fetching recipes...</div>
+    <p class="error" id="error"></p>
+    <div class="recipes" id="result"></div>
+
+    <div class="saved-header">Saved Recipes</div>
+    <div class="recipes" id="savedRecipes"></div>
+  </div>
+
+  <script>
+    function toggleDark() {
+      document.body.classList.toggle("dark");
+    }
+
+    function copyText(text) {
+      navigator.clipboard.writeText(text);
+      alert("Recipe title copied!");
+    }
+
+    function saveRecipe(recipe) {
+      const saved = JSON.parse(localStorage.getItem("savedRecipes")) || [];
+      if (!saved.some(r => r.id === recipe.id)) {
+        saved.push(recipe);
+        localStorage.setItem("savedRecipes", JSON.stringify(saved));
+        loadSavedRecipes();
+        alert("Recipe saved!");
+      } else {
+        alert("Already saved.");
+      }
+    }
+
+    function loadSavedRecipes() {
+      const saved = JSON.parse(localStorage.getItem("savedRecipes")) || [];
+      const container = document.getElementById("savedRecipes");
+      container.innerHTML = "";
+      saved.forEach(displayRecipeCard(container));
+    }
+
+    function displayRecipeCard(container) {
+      return recipe => {
+        const recipeDiv = document.createElement("div");
+        recipeDiv.className = "recipe";
+        recipeDiv.innerHTML = `
+          <img src="${recipe.image}" alt="${recipe.title}" />
+          <h2>${recipe.title}</h2>
+          <p><strong>ID:</strong> ${recipe.id}</p>
+          <button onclick='copyText("${recipe.title}")'>📋 Copy Title</button>
+          <button onclick='saveRecipe(${JSON.stringify(recipe)})'>💾 Save</button>
+        `;
+        container.appendChild(recipeDiv);
+      };
+    }
+
+    async function generateRecipe() {
+      const ingredients = document.getElementById("ingredients").value.trim();
+      const errorDiv = document.getElementById("error");
+      const resultDiv = document.getElementById("result");
+      const loading = document.getElementById("loading");
+
+      errorDiv.textContent = "";
+      resultDiv.innerHTML = "";
+      loading.style.display = "block";
+
+      if (!ingredients) {
+        loading.style.display = "none";
+        errorDiv.textContent = "Please enter some ingredients.";
+        return;
+      }
+
+      try {
+        const response = await fetch("/generate", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ ingredients }),
+        });
+
+        const data = await response.json();
+        loading.style.display = "none";
+
+        if (data.error) {
+          errorDiv.textContent = "Error: " + data.error;
+          return;
+        }
+
+        resultDiv.innerHTML = "";
+        data.recipes.forEach(displayRecipeCard(resultDiv));
+      } catch (error) {
+        loading.style.display = "none";
+        errorDiv.textContent = "Something went wrong. Please try again.";
+        console.error(error);
+      }
+    }
+
+    // Load saved recipes on page load
+    window.onload = loadSavedRecipes;
+  </script>
+</body>
+</html>
